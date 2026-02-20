@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wedding-postgres
+    environment:
+      POSTGRES_DB: wedding
+      POSTGRES_USER: wedding
+      POSTGRES_PASSWORD: wedding_dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wedding"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wedding-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wedding-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://wedding:wedding_dev_password@postgres:5432/wedding
+      JWT_SECRET: dev-secret-key-change-in-production
+      DEBUG: "true"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wedding-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: wedding-frontend
+    command: npm run dev -- --host
+    ports:
+      - "5174:5173"
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - wedding-network
+
+volumes:
+  postgres_data:
+
+networks:
+  wedding-network:
+    driver: bridge
